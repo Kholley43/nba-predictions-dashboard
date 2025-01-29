@@ -87,7 +87,12 @@ def create_dashboard():
         if 'Hit Rate: Last 20 Outcomes' in df.columns:
             selected_player = st.selectbox("Select Player", df['Player'].unique())
             player_data = df[df['Player'] == selected_player]
-            fig6 = px.line(player_data, x=range(20), y='Hit Rate: Last 20 Outcomes', title=f"{selected_player}'s Last 20 Games")
+            outcomes = player_data['Hit Rate: Last 20 Outcomes'].iloc[0]  # Get the first occurrence
+            trend_data = pd.DataFrame({
+                'Game': range(1, 21),
+                'Hit Rate': [int(x) for x in outcomes]
+            })
+            fig6 = px.line(trend_data, x='Game', y='Hit Rate', title=f"{selected_player}'s Last 20 Games")
             st.plotly_chart(fig6)
     else:
         st.info("Upload a predictions CSV file to view analytics")
