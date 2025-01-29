@@ -144,9 +144,9 @@ def trend_analysis(df):
 
 def get_espn_stats(player_name, market_type):
     """
-    Fetches real-time NBA stats from ESPN
+    Fetches real-time NBA stats using ESPN v3 API
     """
-    base_url = "http://sports.core.api.espn.com/v2/sports/basketball/leagues/nba/athletes"
+    base_url = "http://site.api.espn.com/apis/site/v2/sports/basketball/nba"
     
     headers = {
         'User-Agent': 'Mozilla/5.0',
@@ -154,38 +154,56 @@ def get_espn_stats(player_name, market_type):
     }
     
     try:
-        # Search for player
-        search_url = f"{base_url}?search={player_name}"
-        response = requests.get(search_url, headers=headers)
-        player_data = response.json()
+        # Get today's games and stats
+        response = requests.get(f"{base_url}/scoreboard", headers=headers)
+        games_data = response.json()
         
-        # Get latest game stats
-        player_id = player_data['items'][0]['id']
-        stats_url = f"{base_url}/{player_id}/statistics"
-        stats = requests.get(stats_url, headers=headers).json()
-        
-        # Map market type to stat category
-        stat_mapping = {
-            'Points': 'points',
-            'Rebounds': 'rebounds',
-            'Assists': 'assists',
-            'Steals': 'steals',
-            'Blocks': 'blocks',
-            'PTS+REB': lambda x: x['points'] + x['rebounds'],
-            'PTS+AST': lambda x: x['points'] + x['assists'],
-            'REB+AST': lambda x: x['rebounds'] + x['assists'],
-            'PTS+REB+AST': lambda x: x['points'] + x['rebounds'] + x['assists']
-        }
-        
-        if market_type in stat_mapping:
-            if callable(stat_mapping[market_type]):
-                return stat_mapping[market_type](stats)
-            return stats[stat_mapping[market_type]]
-            
+        # Process live game data
+        for game in games_data['events']:
+            for player in game['competitions'][0]['competitors']:
+                if player_name.lower() in player['name'].lower():
+                    return process_player_stats(player, market_type)
+                    
         return None
     except Exception as e:
-        print(f"Error fetching stats: {e}")
+        st.sidebar.error(f"Stats Update: {e}")
         return None
+
+def process_player_stats(stats_data, market_type):
+    """
+    Processes raw ESPN stats data into usable metrics
+    """
+    stats_mapping = {
+        'Points': 'points',
+        'Rebounds': 'rebounds',
+        'Assists': 'assists',
+        'PTS+REB': lambda x: x['points'] + x['rebounds'],
+        'PTS+AST': lambda x: x['points'] + x['assists'],
+        'REB+AST': lambda x: x['rebounds'] + x['assists'],
+        'PTS+REB+AST': lambda x: x['points'] + x['rebounds'] + x['assists'],
+        'Steals': 'steals',
+        'Blocks': 'blocks',
+        'BLK+STL': lambda x: x['blocks'] + x['steals']
+    }
+    
+    return stats_mapping[market_type](stats_data) if market_type in stats_mapping else None
+
+def get_live_game_stats():
+    """
+    Fetches all live NBA game stats
+    """
+    url = "http://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard"
+    response = requests.get(url)
+    return response.json()
+
+def update_dashboard_stats():
+    """
+    Updates dashboard with live stats every 60 seconds
+    """
+    while True:
+        live_stats = get_live_game_stats()
+        st.session_state.live_stats = live_stats
+        sleep(60)
 
 def auto_validate_predictions():
     """
@@ -212,6 +230,11 @@ def create_dashboard():
     # Start auto-validation in background
     validation_thread = threading.Thread(target=auto_validate_predictions, daemon=True)
     validation_thread.start()
+    
+    # Add status section
+    st.sidebar.header("Live Updates")
+    st.sidebar.metric("Last Check", datetime.now().strftime("%H:%M:%S"))
+    st.sidebar.progress(100)
     
     page = st.radio("Navigation", ["Today's Best Bets", "Results Tracking", "Analysis"], horizontal=True)
    
