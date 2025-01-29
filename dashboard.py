@@ -16,11 +16,8 @@ def create_dashboard():
     uploaded_file = st.file_uploader("Upload your predictions CSV", type=['csv'])
     if uploaded_file is not None:
         df = pd.read_csv(uploaded_file)
+        st.write("Available columns:", list(df.columns))
         st.session_state.prediction_data = df
-        
-        # Display data overview
-        st.header("Data Overview")
-        st.dataframe(df.head())
     
     df = load_data()
     
