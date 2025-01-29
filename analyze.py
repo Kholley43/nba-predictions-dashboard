@@ -91,3 +91,25 @@ for _, play in elite_plays.iterrows():
     print(f"Last 20 Pattern: {play['Hit Rate: Last 20 Outcomes']}")
     print(f"Confidence: {play['Confidence']}%")
     print("-" * 50)
+
+def get_espn_stats(player_name):
+    """
+    Fetches player statistics from ESPN
+    """
+    stats = {
+        'points': 0,
+        'rebounds': 0,
+        'assists': 0,
+        'steals': 0,
+        'blocks': 0,
+        'turnovers': 0,
+        'minutes': 0
+    }
+    
+    try:
+        # ESPN API endpoint would go here
+        # For now returning placeholder stats
+        return stats
+    except Exception as e:
+        print(f"Error fetching ESPN stats: {e}")
+        return stats
