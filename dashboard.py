@@ -38,7 +38,16 @@ def initialize_database():
 
 def save_prediction(prediction):
     conn = sqlite3.connect('predictions.db')
-    prediction.to_sql('predictions', conn, if_exists='append', index=False)
+    data = pd.DataFrame({
+        'date': [prediction['Date']],
+        'player': [prediction['Player']],
+        'market': [prediction['Market Name']],
+        'line': [prediction['Line']],
+        'prediction': ['Over'],
+        'result': ['Pending'],
+        'hit_rate': [prediction['Weighted Hit Rate']]
+    })
+    data.to_sql('predictions', conn, if_exists='append', index=False)
     conn.close()
 
 def load_results():
