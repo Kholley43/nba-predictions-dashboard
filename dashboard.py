@@ -15,13 +15,18 @@ def create_dashboard():
     # File uploader
     uploaded_file = st.file_uploader("Upload your predictions CSV", type=['csv'])
     if uploaded_file is not None:
-        st.session_state.prediction_data = pd.read_csv(uploaded_file)
+        df = pd.read_csv(uploaded_file)
+        st.session_state.prediction_data = df
         
+        # Display data overview
+        st.header("Data Overview")
+        st.dataframe(df.head())
+    
     df = load_data()
     
     if len(df) > 0:
         # Key Metrics
-        col1, col2, col3 = st.columns(3)
+        col1, col2, col3, col4 = st.columns(4)
         with col1:
             accuracy = (df['Result'].mean() * 100) if 'Result' in df else 0
             st.metric("Overall Accuracy", f"{accuracy:.1f}%")
@@ -31,20 +36,37 @@ def create_dashboard():
         with col3:
             roi = ((df['Result'].sum() * 100) / len(df)) - 100 if 'Result' in df else 0
             st.metric("ROI", f"{roi:.1f}%")
+        with col4:
+            if 'Hit Rate: Season' in df.columns:
+                avg_hit_rate = df['Hit Rate: Season'].mean()
+                st.metric("Season Hit Rate", f"{avg_hit_rate:.1f}%")
+
+        # Market Analysis
+        st.header("Market Analysis")
+        if 'Market Name' in df.columns:
+            market_counts = df['Market Name'].value_counts()
+            fig1 = px.bar(market_counts, title="Predictions by Market Type")
+            st.plotly_chart(fig1)
         
         # Performance by Market
-        st.header("Market Performance")
         if 'Market' in df:
             market_perf = df.groupby('Market')['Result'].agg(['count', 'mean'])
-            fig = px.bar(market_perf, y='mean', title="Win Rate by Market Type")
-            st.plotly_chart(fig)
+            fig2 = px.bar(market_perf, y='mean', title="Win Rate by Market Type")
+            st.plotly_chart(fig2)
         
         # Confidence Analysis
-        st.header("Confidence Score Analysis")
-        if 'Confidence' in df and 'Result' in df:
-            fig2 = px.scatter(df, x='Confidence', y='Result', 
-                         trendline="lowess", title="Confidence vs Actual Results")
-            st.plotly_chart(fig2)
+        st.header("Confidence Analysis")
+        col1, col2 = st.columns(2)
+        with col1:
+            if 'Confidence' in df and 'Result' in df:
+                fig3 = px.scatter(df, x='Confidence', y='Result',
+                             trendline="lowess", title="Confidence vs Results")
+                st.plotly_chart(fig3)
+        with col2:
+            if 'Weighted Hit Rate' in df.columns:
+                fig4 = px.histogram(df, x='Weighted Hit Rate',
+                                title="Distribution of Hit Rates")
+                st.plotly_chart(fig4)
         
         # Recent Predictions
         st.header("Today's Predictions")
