@@ -132,8 +132,24 @@ def trend_analysis(df):
         st.plotly_chart(fig6)
 
 def create_dashboard():
+    st.set_page_config(layout="wide")  # Make dashboard full width
     st.title('🏀 NBA Props Prediction Dashboard')
     initialize_database()
+    
+    # Add custom CSS to make tabs more visible
+    st.markdown("""
+        <style>
+        .stTabs [data-baseweb="tab-list"] {
+            gap: 24px;
+            background-color: #f0f2f6;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+    
+    # Create tabs with bold icons
+    tabs = st.tabs(["📊 Today's Best Bets", "📈 Results Tracking", "📉 Analysis"])
     
     # File uploader moved outside tabs
     uploaded_file = st.file_uploader("Upload your predictions CSV", type=['csv'])
@@ -142,8 +158,6 @@ def create_dashboard():
         st.session_state.prediction_data = df
     
     st.markdown("---")  # Add a horizontal line
-    tabs = st.tabs(["📊 Today's Best Bets", "📈 Results Tracking", "📉 Analysis"])
-    st.markdown("---")  # Add another horizontal line
     
     with tabs[0]:
         if 'prediction_data' in st.session_state:
