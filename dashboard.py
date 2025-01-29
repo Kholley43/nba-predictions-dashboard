@@ -135,14 +135,17 @@ def create_dashboard():
     st.title('🏀 NBA Props Prediction Dashboard')
     initialize_database()
     
+    # File uploader moved outside tabs
+    uploaded_file = st.file_uploader("Upload your predictions CSV", type=['csv'])
+    if uploaded_file is not None:
+        df = pd.read_csv(uploaded_file)
+        st.session_state.prediction_data = df
+    
     tabs = st.tabs(["Today's Best Bets", "Results Tracking", "Analysis"])
     
     with tabs[0]:
-        uploaded_file = st.file_uploader("Upload your predictions CSV", type=['csv'])
-        if uploaded_file is not None:
-            df = pd.read_csv(uploaded_file)
-            st.session_state.prediction_data = df
-            
+        if 'prediction_data' in st.session_state:
+            df = st.session_state.prediction_data
             best_bets = filter_todays_best_bets(df)
             st.header("🎯 Today's Best Bets")
             if len(best_bets) > 0:
@@ -187,8 +190,8 @@ def create_dashboard():
                 st.metric("Win Rate", f"{win_rate:.1f}%")
     
     with tabs[2]:
-        df = load_data()
-        if len(df) > 0:
+        if 'prediction_data' in st.session_state:
+            df = st.session_state.prediction_data
             col1, col2, col3, col4 = st.columns(4)
             metrics_display(df, col1, col2, col3, col4)
             market_analysis(df)
