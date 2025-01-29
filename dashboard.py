@@ -87,7 +87,9 @@ def create_dashboard():
         if 'Hit Rate: Last 20 Outcomes' in df.columns:
             selected_player = st.selectbox("Select Player", df['Player'].unique())
             player_data = df[df['Player'] == selected_player]
-            outcomes_str = player_data['Hit Rate: Last 20 Outcomes'].iloc[0]
+            
+            # Convert the outcomes to string first
+            outcomes_str = str(player_data['Hit Rate: Last 20 Outcomes'].iloc[0])
             outcomes_list = [int(x) for x in outcomes_str if x in '01']
             
             trend_data = pd.DataFrame({
@@ -96,9 +98,9 @@ def create_dashboard():
             })
             
             fig6 = px.line(trend_data, x='Game', y='Hit Rate', 
-                          title=f"{selected_player}'s Last {len(outcomes_list)} Games")
+                           title=f"{selected_player}'s Last {len(outcomes_list)} Games")
             fig6.update_traces(mode='lines+markers')
-            st.plotly_chart(fig6)
+            st.plotly_chart(fig6)    
     else:
         st.info("Upload a predictions CSV file to view analytics")
 
