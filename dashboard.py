@@ -144,30 +144,33 @@ def trend_analysis(df):
 
 def get_espn_stats(player_name, market_type):
     """
-    Fetches real-time NBA stats using ESPN v3 API
+    Fetches real-time NBA stats using ESPN API
     """
     base_url = "http://site.api.espn.com/apis/site/v2/sports/basketball/nba"
     
-    headers = {
-        'User-Agent': 'Mozilla/5.0',
-        'Accept': 'application/json'
-    }
-    
     try:
         # Get today's games and stats
-        response = requests.get(f"{base_url}/scoreboard", headers=headers)
+        response = requests.get(f"{base_url}/scoreboard")
         games_data = response.json()
         
-        # Process live game data
         for game in games_data['events']:
-            for player in game['competitions'][0]['competitors']:
-                if player_name.lower() in player['name'].lower():
-                    return process_player_stats(player, market_type)
-                    
-        return None
+            for team in game['competitions'][0]['competitors']:
+                for athlete in team.get('statistics', []):
+                    if player_name.lower() in athlete['name'].lower():
+                        stats = {
+                            'Points': athlete.get('points', 0),
+                            'Rebounds': athlete.get('rebounds', 0),
+                            'Assists': athlete.get('assists', 0),
+                            'PTS+REB': athlete.get('points', 0) + athlete.get('rebounds', 0),
+                            'PTS+AST': athlete.get('points', 0) + athlete.get('assists', 0),
+                            'REB+AST': athlete.get('rebounds', 0) + athlete.get('assists', 0),
+                            'PTS+REB+AST': athlete.get('points', 0) + athlete.get('rebounds', 0) + athlete.get('assists', 0)
+                        }
+                        return stats.get(market_type, 0)
+        return 0
     except Exception as e:
-        st.sidebar.error(f"Stats Update: {e}")
-        return None
+        st.sidebar.error(f"Stats Update Error: {e}")
+        return 0
 
 def process_player_stats(stats_data, market_type):
     """
@@ -222,93 +225,6 @@ def auto_validate_predictions():
         
         conn.close()
         sleep(300)  # Check every 5 minutes
-
-def create_dashboard():
-    st.title('🏀 NBA Props Prediction Dashboard')
-    initialize_database()
-    initialize_tracking()
-    handle_tracking_errors()
-    
-    # Start all monitoring threads
-    validation_thread = threading.Thread(target=auto_validate_predictions, daemon=True)
-    tracking_thread = threading.Thread(target=update_live_tracking, daemon=True)
-    health_thread = threading.Thread(target=monitor_tracking_health, daemon=True)
-    
-    validation_thread.start()
-    tracking_thread.start()
-    health_thread.start()
-    
-    # Enhanced tracking display
-    with st.sidebar:
-        st.header("System Status")
-        system_status = st.empty()
-        with system_status.container():
-            if st.session_state.tracking_errors:
-                st.error(f"Recent Errors: {len(st.session_state.tracking_errors)}")
-            else:
-                st.success("All Systems Operational")
-                
-        st.metric("Active Trackers", len(st.session_state.tracking_status['active_bets']))
-        st.metric("Last Update", st.session_state.tracking_status['last_update'].strftime("%H:%M:%S"))    
-    page = st.radio("Navigation", ["Today's Best Bets", "Results Tracking", "Analysis"], horizontal=True)
-   
-    uploaded_file = st.file_uploader("Upload your predictions CSV", type=['csv'])
-    if uploaded_file is not None:
-        df = pd.read_csv(uploaded_file)
-        st.session_state.prediction_data = df
-   
-    if page == "Today's Best Bets":
-        if 'prediction_data' in st.session_state:
-            df = st.session_state.prediction_data
-            best_bets = filter_todays_best_bets(df)
-            st.header("🎯 Today's Best Bets")
-            if len(best_bets) > 0:
-                for idx, bet in best_bets.iterrows():
-                    with st.expander(f"{bet['Player']} - {bet['Market Name']}"):
-                        col1, col2, col3 = st.columns([2,1,1])
-                        with col1:
-                            st.write(f"Line: {bet['Line']}")
-                            st.write(f"Weighted Hit Rate: {bet['Weighted Hit Rate']:.1f}%")
-                        with col2:
-                            st.write(f"Last 5: {bet['Hit Rate: Last 5']}%")
-                            st.write(f"Season: {bet['Hit Rate: Season']}%")
-                        with col3:
-                            if st.button("Track Bet", key=f"track_{idx}"):
-                                save_prediction(bet)
-                                st.success("Bet tracked!")
-    elif page == "Results Tracking":
-        st.header("Results Tracking")
-        results = load_results()
-        pending_bets = results[results['result'] == 'Pending']
-        
-        for idx, bet in pending_bets.iterrows():
-            current_value = get_espn_stats(bet['player'], bet['market'])
-            if current_value:
-                st.session_state.tracking_status['active_bets'][idx] = track_bet_progress(
-                    idx, current_value, bet['line']
-                )
-            display_bet_card(bet)
-           
-        hits = len(results[results['result'] == 'Hit'])
-        total = len(results[results['result'] != 'Pending'])
-        if total > 0:
-            win_rate = (hits / total) * 100
-            st.metric("Win Rate", f"{win_rate:.1f}%")
-    else:
-        if 'prediction_data' in st.session_state:
-            df = st.session_state.prediction_data
-            col1, col2, col3, col4 = st.columns(4)
-            metrics_display(df, col1, col2, col3, col4)
-            market_analysis(df)
-            player_performance(df)
-            hit_rate_distribution(df)
-            trend_analysis(df)
-        else:
-            st.info("Upload a predictions CSV file to view analytics")
-
-if __name__ == "__main__":
-    create_dashboard()
-
 def process_live_updates(player_name, market_type, line, prediction):
     """
     Processes live stat updates and returns current progress
@@ -351,26 +267,32 @@ def display_bet_card(bet):
         
         with col1:
             current_value = get_espn_stats(bet['player'], bet['market'])
-            if current_value:
+            if current_value is not None:
                 progress = (current_value / float(bet['line'])) * 100
                 st.progress(min(progress/100, 1.0))
-                st.metric("Progress", f"{current_value}/{bet['line']}")
+                st.metric(
+                    "Current Progress",
+                    f"{current_value}",
+                    delta=f"{current_value - float(bet['line']):.1f} from target",
+                    delta_color="normal"
+                )
         
         with col2:
-            if bet['result'] == 'Pending':
-                status_color = "🟡"
-            elif bet['result'] == 'Hit':
-                status_color = "🟢"
+            st.metric("Target", bet['line'])
+            if current_value >= float(bet['line']):
+                st.success("✅ Target Reached!")
             else:
-                status_color = "🔴"
-            st.write(f"Status: {status_color} {bet['result']}")
-            
+                remaining = float(bet['line']) - current_value
+                st.info(f"Needs {remaining:.1f} more")
+        
         with col3:
+            st.metric("Hit Rate", f"{bet['hit_rate']:.1f}%")
             if bet['result'] == 'Pending':
-                if current_value and current_value > bet['line']:
-                    st.success("On pace to hit!")
+                if current_value >= float(bet['line']):
+                    update_result(bet['id'], 'Hit')
+                    st.success("Bet Hit!")
                 else:
-                    st.warning("Below target")
+                    st.write("🎯 Tracking...")
 
 def update_live_tracking():
     """
@@ -457,3 +379,109 @@ def initialize_tracking():
         
     if 'tracking_errors' not in st.session_state:
         st.session_state.tracking_errors = []
+
+
+def auto_refresh_stats():
+    """
+    Automatically refreshes stats every 30 seconds
+    """
+    if 'last_refresh' not in st.session_state:
+        st.session_state.last_refresh = datetime.now()
+    
+    current_time = datetime.now()
+    if (current_time - st.session_state.last_refresh).seconds >= 30:
+        st.rerun()  # Using st.rerun() instead of experimental_rerun
+        st.session_state.last_refresh = current_time
+
+def create_dashboard():
+    st.title('🏀 NBA Props Prediction Dashboard')
+    initialize_database()
+    initialize_tracking()
+    handle_tracking_errors()
+    
+    # Add this near the top of the function
+    auto_refresh_stats()
+    
+    # Start all monitoring threads
+    validation_thread = threading.Thread(target=auto_validate_predictions, daemon=True)
+    tracking_thread = threading.Thread(target=update_live_tracking, daemon=True)
+    health_thread = threading.Thread(target=monitor_tracking_health, daemon=True)
+    
+    validation_thread.start()
+    tracking_thread.start()
+    health_thread.start()
+    
+    # Enhanced tracking display
+    with st.sidebar:
+        st.header("System Status")
+        system_status = st.empty()
+        with system_status.container():
+            if st.session_state.tracking_errors:
+                st.error(f"Recent Errors: {len(st.session_state.tracking_errors)}")
+            else:
+                st.success("All Systems Operational")
+                
+        st.metric("Active Trackers", len(st.session_state.tracking_status['active_bets']))
+        st.metric("Last Update", st.session_state.tracking_status['last_update'].strftime("%H:%M:%S"))    
+    page = st.radio("Navigation", ["Today's Best Bets", "Results Tracking", "Analysis"], horizontal=True)
+   
+    uploaded_file = st.file_uploader("Upload your predictions CSV", type=['csv'])
+    if uploaded_file is not None:
+        df = pd.read_csv(uploaded_file)
+        st.session_state.prediction_data = df
+   
+    if page == "Today's Best Bets":
+        if 'prediction_data' in st.session_state:
+            df = st.session_state.prediction_data
+            best_bets = filter_todays_best_bets(df)
+            st.header("🎯 Today's Best Bets")
+            if len(best_bets) > 0:
+                for idx, bet in best_bets.iterrows():
+                    with st.expander(f"{bet['Player']} - {bet['Market Name']}"):
+                        col1, col2, col3 = st.columns([2,1,1])
+                        with col1:
+                            st.write(f"Line: {bet['Line']}")
+                            st.write(f"Weighted Hit Rate: {bet['Weighted Hit Rate']:.1f}%")
+                        with col2:
+                            st.write(f"Last 5: {bet['Hit Rate: Last 5']}%")
+                            st.write(f"Season: {bet['Hit Rate: Season']}%")
+                        with col3:
+                            if st.button("Track Bet", key=f"track_{idx}"):
+                                save_prediction(bet)
+                                st.success("Bet tracked!")
+    elif page == "Results Tracking":
+        st.header("Results Tracking")
+        results = load_results()
+        
+        if len(results) > 0:
+            refresh_placeholder = st.empty()
+            with refresh_placeholder.container():
+                for idx, bet in results.iterrows():
+                    current_value = get_espn_stats(bet['player'], bet['market'])
+                    display_bet_card(bet)
+                    
+            # Add refresh button for manual updates
+            if st.button("Refresh Stats"):
+                st.experimental_rerun()
+        
+        hits = len(results[results['result'] == 'Hit'])
+        total = len(results[results['result'] != 'Pending'])
+        if total > 0:
+            win_rate = (hits / total) * 100
+            st.metric("Win Rate", f"{win_rate:.1f}%")    
+    else:
+        if 'prediction_data' in st.session_state:
+            df = st.session_state.prediction_data
+            col1, col2, col3, col4 = st.columns(4)
+            metrics_display(df, col1, col2, col3, col4)
+            market_analysis(df)
+            player_performance(df)
+            hit_rate_distribution(df)
+            trend_analysis(df)
+        else:
+            st.info("Upload a predictions CSV file to view analytics")
+
+if __name__ == "__main__":
+    create_dashboard()
+
+
