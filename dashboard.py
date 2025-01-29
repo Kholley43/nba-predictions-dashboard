@@ -382,15 +382,12 @@ def initialize_tracking():
 
 
 def auto_refresh_stats():
-    """
-    Automatically refreshes stats every 30 seconds
-    """
     if 'last_refresh' not in st.session_state:
         st.session_state.last_refresh = datetime.now()
     
     current_time = datetime.now()
     if (current_time - st.session_state.last_refresh).seconds >= 30:
-        st.rerun()  # Using st.rerun() instead of experimental_rerun
+        st.rerun()
         st.session_state.last_refresh = current_time
 
 def create_dashboard():
@@ -462,7 +459,7 @@ def create_dashboard():
                     
             # Add refresh button for manual updates
             if st.button("Refresh Stats"):
-                st.experimental_rerun()
+                st.rerun()
         
         hits = len(results[results['result'] == 'Hit'])
         total = len(results[results['result'] != 'Pending'])
@@ -480,7 +477,6 @@ def create_dashboard():
             trend_analysis(df)
         else:
             st.info("Upload a predictions CSV file to view analytics")
-
 if __name__ == "__main__":
     create_dashboard()
 
