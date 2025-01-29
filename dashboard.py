@@ -73,7 +73,8 @@ def create_dashboard():
         today = datetime.now().strftime('%Y-%m-%d')
         if 'Date' in df:
             today_preds = df[df['Date'] == today]
-            st.table(today_preds[['Player', 'Market', 'Line', 'Prediction', 'Confidence']])
+            display_columns = ['Player', 'Market Name', 'Line', 'Hit Rate: Season', 'Weighted Hit Rate']
+            st.table(today_preds[display_columns])
     else:
         st.info("Upload a predictions CSV file to view analytics")
 
