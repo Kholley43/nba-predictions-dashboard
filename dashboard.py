@@ -226,16 +226,30 @@ def auto_validate_predictions():
 def create_dashboard():
     st.title('🏀 NBA Props Prediction Dashboard')
     initialize_database()
+    initialize_tracking()
+    handle_tracking_errors()
     
-    # Start auto-validation in background
+    # Start all monitoring threads
     validation_thread = threading.Thread(target=auto_validate_predictions, daemon=True)
+    tracking_thread = threading.Thread(target=update_live_tracking, daemon=True)
+    health_thread = threading.Thread(target=monitor_tracking_health, daemon=True)
+    
     validation_thread.start()
+    tracking_thread.start()
+    health_thread.start()
     
-    # Add status section
-    st.sidebar.header("Live Updates")
-    st.sidebar.metric("Last Check", datetime.now().strftime("%H:%M:%S"))
-    st.sidebar.progress(100)
-    
+    # Enhanced tracking display
+    with st.sidebar:
+        st.header("System Status")
+        system_status = st.empty()
+        with system_status.container():
+            if st.session_state.tracking_errors:
+                st.error(f"Recent Errors: {len(st.session_state.tracking_errors)}")
+            else:
+                st.success("All Systems Operational")
+                
+        st.metric("Active Trackers", len(st.session_state.tracking_status['active_bets']))
+        st.metric("Last Update", st.session_state.tracking_status['last_update'].strftime("%H:%M:%S"))    
     page = st.radio("Navigation", ["Today's Best Bets", "Results Tracking", "Analysis"], horizontal=True)
    
     uploaded_file = st.file_uploader("Upload your predictions CSV", type=['csv'])
@@ -265,28 +279,21 @@ def create_dashboard():
     elif page == "Results Tracking":
         st.header("Results Tracking")
         results = load_results()
-        if len(results) > 0:
-            st.write("Track your prediction outcomes:")
-            for idx, pred in results.iterrows():
-                col1, col2, col3 = st.columns([2,1,1])
-                with col1:
-                    st.write(f"{pred['player']} - {pred['market']}")
-                with col2:
-                    st.write(f"Line: {pred['line']}")
-                with col3:
-                    result = st.selectbox(
-                        "Result",
-                        ["Pending", "Hit", "Miss"],
-                        key=f"result_{idx}"
-                    )
-                    if result != "Pending":
-                        update_result(idx, result)
+        pending_bets = results[results['result'] == 'Pending']
+        
+        for idx, bet in pending_bets.iterrows():
+            current_value = get_espn_stats(bet['player'], bet['market'])
+            if current_value:
+                st.session_state.tracking_status['active_bets'][idx] = track_bet_progress(
+                    idx, current_value, bet['line']
+                )
+            display_bet_card(bet)
            
-            hits = len(results[results['result'] == 'Hit'])
-            total = len(results[results['result'] != 'Pending'])
-            if total > 0:
-                win_rate = (hits / total) * 100
-                st.metric("Win Rate", f"{win_rate:.1f}%")
+        hits = len(results[results['result'] == 'Hit'])
+        total = len(results[results['result'] != 'Pending'])
+        if total > 0:
+            win_rate = (hits / total) * 100
+            st.metric("Win Rate", f"{win_rate:.1f}%")
     else:
         if 'prediction_data' in st.session_state:
             df = st.session_state.prediction_data
@@ -301,3 +308,152 @@ def create_dashboard():
 
 if __name__ == "__main__":
     create_dashboard()
+
+def process_live_updates(player_name, market_type, line, prediction):
+    """
+    Processes live stat updates and returns current progress
+    """
+    current_value = get_espn_stats(player_name, market_type)
+    if current_value is not None:
+        progress = (current_value / float(line)) * 100
+        st.session_state.last_updates[f"{player_name}_{market_type}"] = {
+            'player': player_name,
+            'market': market_type,
+            'current_value': current_value,
+            'line': line,
+            'progress': progress,
+            'prediction': prediction
+        }
+        return current_value
+    return None
+
+def display_live_tracking():
+    """
+    Displays live tracking progress bars and metrics
+    """
+    st.subheader("🎯 Live Prop Tracking")
+    for bet_key, stats in st.session_state.last_updates.items():
+        col1, col2, col3 = st.columns([2,1,1])
+        with col1:
+            st.write(f"{stats['player']} - {stats['market']}")
+            st.progress(min(stats['progress']/100, 1.0))
+        with col2:
+            st.metric("Current", stats['current_value'])
+        with col3:
+            st.metric("Target", stats['line'])
+
+def display_bet_card(bet):
+    """
+    Displays an individual bet card with live tracking
+    """
+    with st.expander(f"{bet['player']} - {bet['market']}", expanded=True):
+        col1, col2, col3 = st.columns([2,1,1])
+        
+        with col1:
+            current_value = get_espn_stats(bet['player'], bet['market'])
+            if current_value:
+                progress = (current_value / float(bet['line'])) * 100
+                st.progress(min(progress/100, 1.0))
+                st.metric("Progress", f"{current_value}/{bet['line']}")
+        
+        with col2:
+            if bet['result'] == 'Pending':
+                status_color = "🟡"
+            elif bet['result'] == 'Hit':
+                status_color = "🟢"
+            else:
+                status_color = "🔴"
+            st.write(f"Status: {status_color} {bet['result']}")
+            
+        with col3:
+            if bet['result'] == 'Pending':
+                if current_value and current_value > bet['line']:
+                    st.success("On pace to hit!")
+                else:
+                    st.warning("Below target")
+
+def update_live_tracking():
+    """
+    Updates all live bets every 60 seconds
+    """
+    while True:
+        results = load_results()
+        pending_bets = results[results['result'] == 'Pending']
+        
+        for _, bet in pending_bets.iterrows():
+            process_live_updates(bet['player'], bet['market'], bet['line'], bet['prediction'])
+        
+        sleep(60)
+
+def handle_tracking_errors():
+    """
+    Manages tracking errors and notifications
+    """
+    if 'tracking_errors' not in st.session_state:
+        st.session_state.tracking_errors = []
+
+def notify_tracking_status(message, level="info"):
+    """
+    Displays tracking notifications
+    """
+    if level == "success":
+        st.success(message)
+    elif level == "warning":
+        st.warning(message)
+    elif level == "error":
+        st.error(message)
+    else:
+        st.info(message)
+
+def monitor_tracking_health():
+    """
+    Monitors tracking system health
+    """
+    while True:
+        try:
+            current_time = datetime.now()
+            last_update = st.session_state.tracking_status['last_update']
+            
+            if (current_time - last_update).seconds > 300:  # 5 minutes
+                notify_tracking_status("Tracking system delayed. Attempting to reconnect...", "warning")
+                initialize_tracking()
+            
+            for bet_id, data in st.session_state.tracking_status['active_bets'].items():
+                if (current_time - data['last_update']).seconds > 180:  # 3 minutes
+                    notify_tracking_status(f"Bet {bet_id} tracking delayed", "warning")
+            
+            sleep(60)
+        except Exception as e:
+            handle_tracking_errors()
+            notify_tracking_status(f"Tracking error: {str(e)}", "error")
+
+def track_bet_progress(bet_id, current_value, target):
+    """
+    Tracks the progress of a bet and returns a status dictionary
+    """
+    return {
+        'bet_id': bet_id,
+        'progress': (current_value / float(target)) * 100 if current_value else 0,
+        'current': current_value,
+        'target': float(target),
+        'last_update': datetime.now(),
+        'status': 'Hit' if current_value >= float(target) else 'In Progress'
+    }
+
+def initialize_tracking():
+    """
+    Initializes tracking system state variables
+    """
+    if 'tracking_status' not in st.session_state:
+        st.session_state.tracking_status = {
+            'last_update': datetime.now(),
+            'active_bets': {},
+            'updates_count': 0,
+            'system_health': 'operational'
+        }
+    
+    if 'live_updates' not in st.session_state:
+        st.session_state.live_updates = {}
+        
+    if 'tracking_errors' not in st.session_state:
+        st.session_state.tracking_errors = []
