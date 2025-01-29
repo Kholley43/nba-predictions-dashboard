@@ -143,16 +143,14 @@ def trend_analysis(df):
 def create_dashboard():
     st.title('🏀 NBA Props Prediction Dashboard')
     initialize_database()
-    
-    # Create radio buttons instead of tabs for guaranteed visibility
+   
     page = st.radio("Navigation", ["Today's Best Bets", "Results Tracking", "Analysis"], horizontal=True)
-    
-    # File uploader moved outside navigation
+   
     uploaded_file = st.file_uploader("Upload your predictions CSV", type=['csv'])
     if uploaded_file is not None:
         df = pd.read_csv(uploaded_file)
         st.session_state.prediction_data = df
-    
+   
     if page == "Today's Best Bets":
         if 'prediction_data' in st.session_state:
             df = st.session_state.prediction_data
@@ -180,9 +178,9 @@ def create_dashboard():
             for idx, pred in results.iterrows():
                 col1, col2, col3 = st.columns([2,1,1])
                 with col1:
-                    st.write(f"{pred['Player']} - {pred['Market Name']}")
+                    st.write(f"{pred['player']} - {pred['market']}")
                 with col2:
-                    st.write(f"Line: {pred['Line']}")
+                    st.write(f"Line: {pred['line']}")
                 with col3:
                     result = st.selectbox(
                         "Result",
@@ -191,7 +189,7 @@ def create_dashboard():
                     )
                     if result != "Pending":
                         update_result(idx, result)
-            
+           
             hits = len(results[results['result'] == 'Hit'])
             total = len(results[results['result'] != 'Pending'])
             if total > 0:
