@@ -5,6 +5,8 @@ import plotly.graph_objects as go
 from datetime import datetime
 import sqlite3
 import requests
+from time import sleep
+import threading
 
 def load_data():
     if 'prediction_data' not in st.session_state:
@@ -140,10 +142,77 @@ def trend_analysis(df):
         fig6.update_traces(mode='lines+markers')
         st.plotly_chart(fig6)
 
+def get_espn_stats(player_name, market_type):
+    """
+    Fetches real-time NBA stats from ESPN
+    """
+    base_url = "http://sports.core.api.espn.com/v2/sports/basketball/leagues/nba/athletes"
+    
+    headers = {
+        'User-Agent': 'Mozilla/5.0',
+        'Accept': 'application/json'
+    }
+    
+    try:
+        # Search for player
+        search_url = f"{base_url}?search={player_name}"
+        response = requests.get(search_url, headers=headers)
+        player_data = response.json()
+        
+        # Get latest game stats
+        player_id = player_data['items'][0]['id']
+        stats_url = f"{base_url}/{player_id}/statistics"
+        stats = requests.get(stats_url, headers=headers).json()
+        
+        # Map market type to stat category
+        stat_mapping = {
+            'Points': 'points',
+            'Rebounds': 'rebounds',
+            'Assists': 'assists',
+            'Steals': 'steals',
+            'Blocks': 'blocks',
+            'PTS+REB': lambda x: x['points'] + x['rebounds'],
+            'PTS+AST': lambda x: x['points'] + x['assists'],
+            'REB+AST': lambda x: x['rebounds'] + x['assists'],
+            'PTS+REB+AST': lambda x: x['points'] + x['rebounds'] + x['assists']
+        }
+        
+        if market_type in stat_mapping:
+            if callable(stat_mapping[market_type]):
+                return stat_mapping[market_type](stats)
+            return stats[stat_mapping[market_type]]
+            
+        return None
+    except Exception as e:
+        print(f"Error fetching stats: {e}")
+        return None
+
+def auto_validate_predictions():
+    """
+    Automatically validates predictions against real stats
+    """
+    while True:
+        conn = sqlite3.connect('predictions.db')
+        pending_predictions = pd.read_sql('SELECT * FROM predictions WHERE result="Pending"', conn)
+        
+        for idx, pred in pending_predictions.iterrows():
+            actual_value = get_espn_stats(pred['player'], pred['market'])
+            if actual_value is not None:
+                result = 'Hit' if (pred['prediction'] == 'Over' and actual_value > pred['line']) or \
+                                 (pred['prediction'] == 'Under' and actual_value < pred['line']) else 'Miss'
+                update_result(pred['id'], result)
+        
+        conn.close()
+        sleep(300)  # Check every 5 minutes
+
 def create_dashboard():
     st.title('🏀 NBA Props Prediction Dashboard')
     initialize_database()
-   
+    
+    # Start auto-validation in background
+    validation_thread = threading.Thread(target=auto_validate_predictions, daemon=True)
+    validation_thread.start()
+    
     page = st.radio("Navigation", ["Today's Best Bets", "Results Tracking", "Analysis"], horizontal=True)
    
     uploaded_file = st.file_uploader("Upload your predictions CSV", type=['csv'])
