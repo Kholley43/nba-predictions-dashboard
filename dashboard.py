@@ -141,7 +141,9 @@ def create_dashboard():
         df = pd.read_csv(uploaded_file)
         st.session_state.prediction_data = df
     
-    tabs = st.tabs(["Today's Best Bets", "Results Tracking", "Analysis"])
+    st.markdown("---")  # Add a horizontal line
+    tabs = st.tabs(["📊 Today's Best Bets", "📈 Results Tracking", "📉 Analysis"])
+    st.markdown("---")  # Add another horizontal line
     
     with tabs[0]:
         if 'prediction_data' in st.session_state:
