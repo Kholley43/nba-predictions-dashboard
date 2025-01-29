@@ -132,34 +132,19 @@ def trend_analysis(df):
         st.plotly_chart(fig6)
 
 def create_dashboard():
-    st.set_page_config(layout="wide")  # Make dashboard full width
     st.title('🏀 NBA Props Prediction Dashboard')
     initialize_database()
     
-    # Add custom CSS to make tabs more visible
-    st.markdown("""
-        <style>
-        .stTabs [data-baseweb="tab-list"] {
-            gap: 24px;
-            background-color: #f0f2f6;
-            padding: 10px;
-            border-radius: 4px;
-        }
-        </style>
-    """, unsafe_allow_html=True)
+    # Create radio buttons instead of tabs for guaranteed visibility
+    page = st.radio("Navigation", ["Today's Best Bets", "Results Tracking", "Analysis"], horizontal=True)
     
-    # Create tabs with bold icons
-    tabs = st.tabs(["📊 Today's Best Bets", "📈 Results Tracking", "📉 Analysis"])
-    
-    # File uploader moved outside tabs
+    # File uploader moved outside navigation
     uploaded_file = st.file_uploader("Upload your predictions CSV", type=['csv'])
     if uploaded_file is not None:
         df = pd.read_csv(uploaded_file)
         st.session_state.prediction_data = df
     
-    st.markdown("---")  # Add a horizontal line
-    
-    with tabs[0]:
+    if page == "Today's Best Bets":
         if 'prediction_data' in st.session_state:
             df = st.session_state.prediction_data
             best_bets = filter_todays_best_bets(df)
@@ -178,8 +163,7 @@ def create_dashboard():
                             if st.button("Track Bet", key=f"track_{idx}"):
                                 save_prediction(bet)
                                 st.success("Bet tracked!")
-    
-    with tabs[1]:
+    elif page == "Results Tracking":
         st.header("Results Tracking")
         results = load_results()
         if len(results) > 0:
@@ -204,8 +188,7 @@ def create_dashboard():
             if total > 0:
                 win_rate = (hits / total) * 100
                 st.metric("Win Rate", f"{win_rate:.1f}%")
-    
-    with tabs[2]:
+    else:
         if 'prediction_data' in st.session_state:
             df = st.session_state.prediction_data
             col1, col2, col3, col4 = st.columns(4)
